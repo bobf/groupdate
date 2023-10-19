@@ -2,8 +2,9 @@ module Groupdate
   module Adapters
     class MySQLAdapter < BaseAdapter
       def group_clause
-        time_zone = @time_zone.tzinfo.name
-        day_start_column = "CONVERT_TZ(#{column}, '+00:00', ?) - INTERVAL ? second"
+        time_zone = convert_tz? ? @time_zone.tzinfo.name : nil
+        convert_tz_function = convert_tz? ? 'CONVERT_TZ' : 'COALESCE'
+        day_start_column = "#{convert_tz_function}(#{column}, '+00:00', ?) - INTERVAL ? second"
 
         query =
           case period
@@ -48,7 +49,7 @@ module Groupdate
                 "%Y-%m-%d %H:00:00"
               end
 
-            ["CONVERT_TZ(DATE_FORMAT(#{day_start_column}, ?) + INTERVAL ? second, ?, '+00:00')", time_zone, day_start, format, day_start, time_zone]
+            ["#{convert_tz_function}(DATE_FORMAT(#{day_start_column}, ?) + INTERVAL ? second, ?, '+00:00')", time_zone, day_start, format, day_start, time_zone]
           end
 
         clean_group_clause(@relation.send(:sanitize_sql_array, query))
@@ -57,6 +58,10 @@ module Groupdate
       def clean_group_clause(clause)
         # zero quoted in Active Record 7+
         clause.gsub(/ (\-|\+) INTERVAL 0 second/, "").gsub(/ (\-|\+) INTERVAL '0' second/, "")
+      end
+
+      def convert_tz?
+        !ENV.key?('GROUPDATE_IGNORE_TIMEZONES')
       end
     end
   end
